@@ -1,0 +1,79 @@
+﻿"Phrases"
+{
+	"MENU_TITLE"
+	{
+		"en"				"Referral System"
+	}
+	"MENU_INVITED_BY"
+	{
+		"en"				"Invited by: {1}"
+	}
+	"MENU_YOU_INVITED"
+	{
+		"en"				"Your invites: {1}"
+	}
+	"MENU_CODE"
+	{
+		"en"				"Your code: {1}"
+	}
+	"MENU_SET_CUSTOM"
+	{
+		"en"				"Set custom code"
+	}
+	"MENU_REFER"
+	{
+		"en"				"Refer a code"
+	}
+	"CHAT_PREFIX"
+	{
+		"en"				"Referral"
+	}
+	"CHAT_OWN_CODE"
+	{
+		"en"				"You cannot enter your own code..."
+	}
+	"CHAT_ENTER_CODE"
+	{
+		"en"				"Enter your inviter's code to refer or type 'cancel' to cancel."
+	}
+	"CHAT_ENTER_NEW_CODE"
+	{
+		"en"				"Enter your customly choosen invite code or type 'cancel' to cancel."
+	}
+	"CHAT_CODE_NOT_FOUND"
+	{
+		"en"				"The given referral code was not found."
+	}
+	"CHAT_REFERED"
+	{
+		"#format" 		"{1:s},{2:.2f}"
+		"en"				"You have been refered by {1} and recieved {2} credits."
+	}
+	"CHAT_REFERED_BY"
+	{
+		"#format" 		"{1:.2f},{2:N}"
+		"en"				"You have recieved {1} credits for refering {2}."
+	}
+	"CHAT_CODE_EXISTS"
+	{
+		"en"				"The given code already exists. Pick another one!"
+	}
+	"CHAT_CODE_CHANGED"
+	{
+		"#format" 		"{1:s}"
+		"en"				"Your referral code has been changed to {1}."
+	}
+	"CHAT_RECIEVE_OFFLINE"
+	{
+		"#format" 		"{1:d},{2:.2f}"
+		"en"				"You have recieved {1} credits for refering {2} players while being offline."
+	}
+	"CHAT_LENGTH_ERROR"
+	{
+		"en"				"The custom-code must be between 3 and 16 characters long."
+	}
+	"MENU_EXIT"
+	{
+		"en"				"Close"
+	}
+}
