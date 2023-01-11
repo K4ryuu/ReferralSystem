@@ -68,6 +68,11 @@
 		"#format" 		"{1:d},{2:.2f}"
 		"en"				"You have recieved {1} credits for refering {2} players while being offline."
 	}
+	"CHAT_WAIT"
+	{
+		"#format" 		"{1:d}"
+		"en"				"You have to play {1} more minutes to be able to refer a code."
+	}
 	"CHAT_LENGTH_ERROR"
 	{
 		"en"				"The custom-code must be between 3 and 16 characters long."

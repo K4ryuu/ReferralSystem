@@ -16,6 +16,7 @@ ConVar	g_hConVarCreditsStart;
 ConVar	g_hConVarCreditsStep;
 ConVar	g_hConVarCreditsNew;
 ConVar	g_hConVarWebHook;
+ConVar	g_hConVarMinTime;
 
 char		g_sPlayerSteamID[MAXPLAYERS + 1][32];
 char		g_sPlayerCode[MAXPLAYERS + 1][32];
@@ -24,6 +25,7 @@ char		g_sPlayerInviter[MAXPLAYERS + 1][MAX_NAME_LENGTH];
 int		g_iPlayerInvited[MAXPLAYERS + 1];
 int		g_iPlayerValidated[MAXPLAYERS + 1];
 int		g_iPlayerWriteStatus[MAXPLAYERS + 1] = { 0, ... };
+int		g_iPlayerTime[MAXPLAYERS + 1]			 = { 0, ... };
 
 /* <----> Plugin Info <----> */
 public Plugin myinfo =
@@ -61,8 +63,26 @@ public void OnPluginStart()
 	g_hConVarCreditsStep	 = CreateConVar("sm_refer_credit_inviter_step", "5.0", "How much credit increase in reward after an invite.", _, true, 0.0);
 	g_hConVarCreditsStart = CreateConVar("sm_refer_credit_inviter_start", "10.0", "The base reward for the first invite. After that (start + (invited * step))", _, true, 0.0);
 	g_hConVarWebHook		 = CreateConVar("sm_refer_discord_webhook", "", "Discord WebHook to send refer messages", FCVAR_PROTECTED);
+	g_hConVarMinTime		 = CreateConVar("sm_refer_min_time", "10", "Minimum minutes to refer to the inviter", _, true, 0.0);
 
 	Karyuu_RegCommand("sm_ref;sm_referral", Command_ReferralMenu, "Opens the referral menu");
+
+	CreateTimer(60.0, Timer_AddPlayTime, _, TIMER_REPEAT);
+}
+
+public Action Timer_AddPlayTime(Handle timer, DataPack pack)
+{
+	for (int iClient = 1; iClient < MaxClients; iClient++)
+	{
+		if (!IsClientInGame(iClient) || IsFakeClient(iClient))
+			continue;
+
+		if (g_sPlayerInviter[iClient][0] != '\0' && g_iPlayerTime[iClient] < g_hConVarMinTime.IntValue)
+			continue;
+
+		g_iPlayerTime[iClient]++;
+	}
+	return Plugin_Continue;
 }
 
 public Action EventHook_PlayerTeam(Event event, const char[] name, bool dontBroadcast)
@@ -144,11 +164,14 @@ public int MenuSystem_MainMenu_Handler(Menu menu, MenuAction action, int iClient
 		{
 			case 1:
 			{
-				if (g_sPlayerInviter[iClient][0] == '\0')
+				if (g_iPlayerTime[iClient] < g_hConVarMinTime.IntValue)
 				{
-					g_iPlayerWriteStatus[iClient] = 1;
-					CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_ENTER_CODE", iClient);
+					CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_WAIT", iClient, g_hConVarMinTime.IntValue - g_iPlayerTime[iClient]);
+					return 0;
 				}
+
+				g_iPlayerWriteStatus[iClient] = 1;
+				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_ENTER_CODE", iClient);
 			}
 			case 2:
 			{
@@ -202,6 +225,7 @@ public void OnClientPostAdminCheck(int iClient)
 	g_iPlayerWriteStatus[iClient] = 0;
 	g_iPlayerInvited[iClient]		= 0;
 	g_iPlayerValidated[iClient]	= 0;
+	g_iPlayerTime[iClient]			= 0;
 	FormatEx(g_sPlayerCode[iClient], sizeof(g_sPlayerCode[]), "None");
 
 	char sQuery[256];
