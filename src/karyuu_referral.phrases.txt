@@ -58,6 +58,18 @@
 	{
 		"en"				"The given code already exists. Pick another one!"
 	}
+	"CHAT_ALREADY_REFERRED"
+	{
+		"en"				"You have already used a referral code."
+	}
+	"CHAT_CANT_REFER"
+	{
+		"en"				"You cannot use refferal codes anymore. Only new players can use them."
+	}
+	"CHAT_CMD_HELP"
+	{
+		"en"				"Usage: sm_referral <code>"
+	}
 	"CHAT_CODE_CHANGED"
 	{
 		"#format" 		"{1:s}"
@@ -70,12 +82,26 @@
 	}
 	"CHAT_WAIT"
 	{
-		"#format" 		"{1:d}"
-		"en"				"You have to play {1} more minutes to be able to refer a code."
+		"en"				"You have to play {1} more minutes to be able to use this command."
 	}
 	"CHAT_LENGTH_ERROR"
 	{
 		"en"				"The custom-code must be between 3 and 16 characters long."
+	}
+	"CHAT_REFER_AVAILABLE"
+	{
+		"#format" 		"{1:d}"
+		"en"				"You have {1} minutes left to refer an invite code using {lightred}!redeem <code> {lime}or {lightred}!noredeem {lime}to claim rewards."
+	}
+	"CHAT_REFER_AVAILABLE_HINT"
+	{
+		"#format" 		"{1:d}"
+		"en"				"You can use the referral system for {1} more minutes. More information in the chat."
+	}
+	"CHAT_REFERRED"
+	{
+		"#format" 		"{1:d}"
+		"en"				"Succesfully redeemed invite code. Your reward will be added to your balance after {1} minutes playtime."
 	}
 	"MENU_EXIT"
 	{

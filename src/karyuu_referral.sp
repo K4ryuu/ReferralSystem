@@ -17,10 +17,12 @@ ConVar	g_hConVarCreditsStep;
 ConVar	g_hConVarCreditsNew;
 ConVar	g_hConVarWebHook;
 ConVar	g_hConVarMinTime;
+ConVar	g_hConVarRewardTime;
 
 char		g_sPlayerSteamID[MAXPLAYERS + 1][32];
 char		g_sPlayerCode[MAXPLAYERS + 1][32];
 char		g_sPlayerInviter[MAXPLAYERS + 1][MAX_NAME_LENGTH];
+char		g_sPlayerInviterSteam[MAXPLAYERS + 1][32];
 
 int		g_iPlayerInvited[MAXPLAYERS + 1];
 int		g_iPlayerValidated[MAXPLAYERS + 1];
@@ -63,24 +65,94 @@ public void OnPluginStart()
 	g_hConVarCreditsStep	 = CreateConVar("sm_refer_credit_inviter_step", "5.0", "How much credit increase in reward after an invite.", _, true, 0.0);
 	g_hConVarCreditsStart = CreateConVar("sm_refer_credit_inviter_start", "10.0", "The base reward for the first invite. After that (start + (invited * step))", _, true, 0.0);
 	g_hConVarWebHook		 = CreateConVar("sm_refer_discord_webhook", "", "Discord WebHook to send refer messages", FCVAR_PROTECTED);
-	g_hConVarMinTime		 = CreateConVar("sm_refer_min_time", "10", "Minimum minutes to refer to the inviter", _, true, 0.0);
+	g_hConVarMinTime		 = CreateConVar("sm_refer_min_time", "10", "Minimum time to refer a code", _, true, 0.0);
+	g_hConVarRewardTime	 = CreateConVar("sm_refer_reward_time", "180", "How much time player have to play to get the rewards", _, true, 0.0);
 
 	Karyuu_RegCommand("sm_ref;sm_referral", Command_ReferralMenu, "Opens the referral menu");
+	Karyuu_RegCommand("sm_redeem", Command_ReferCode, "Uses a referral code to claim rewards");
+	Karyuu_RegCommand("sm_noredeem", Command_NoReferCode, "Set no referral and claim rewards");
 
 	CreateTimer(60.0, Timer_AddPlayTime, _, TIMER_REPEAT);
 }
 
 public Action Timer_AddPlayTime(Handle timer, DataPack pack)
 {
+	char			sQuery[256];
+	Transaction txn = new Transaction();
+
 	for (int iClient = 1; iClient < MaxClients; iClient++)
 	{
 		if (!IsClientInGame(iClient) || IsFakeClient(iClient))
 			continue;
 
-		if (g_sPlayerInviter[iClient][0] != '\0' && g_iPlayerTime[iClient] < g_hConVarMinTime.IntValue)
-			continue;
-
 		g_iPlayerTime[iClient]++;
+		g_database.Format(STRING(sQuery), "UPDATE `ref_data` SET `time` = (`time` + '1') WHERE `steamid` = '%s';", g_sPlayerSteamID[iClient]);
+		txn.AddQuery(sQuery);
+
+		if (g_sPlayerInviter[iClient][0] == '\0')
+		{
+			if (g_iPlayerTime[iClient] > g_hConVarMinTime.IntValue)
+			{
+				FormatEx(g_sPlayerInviter[iClient], sizeof(g_sPlayerInviter[]), "None");
+
+				g_database.Format(STRING(sQuery), "UPDATE `ref_data` SET `inviter` = 'None' WHERE `steamid` = '%s';", g_sPlayerSteamID[iClient]);
+				txn.AddQuery(sQuery);
+
+				continue;
+			}
+
+			char sBuffer[256];
+			FormatEx(STRING(sBuffer), "%T", iClient, "CHAT_REFER_AVAILABLE_HINT", iClient, g_hConVarMinTime.IntValue - g_iPlayerTime[iClient]);
+
+			PrintHintText(iClient, sBuffer);
+			CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lime}%T", "CHAT_PREFIX", iClient, "CHAT_REFER_AVAILABLE", iClient, g_hConVarMinTime.IntValue - g_iPlayerTime[iClient]);
+		}
+		else
+		{
+			if (g_iPlayerTime[iClient] > g_hConVarRewardTime.IntValue)
+			{
+				GiveCredits(iClient, g_hConVarCreditsNew.FloatValue);
+				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lime}%T", "CHAT_PREFIX", iClient, "CHAT_REFERED", iClient, g_sPlayerInviter[iClient], g_hConVarCreditsNew.FloatValue);
+
+				g_database.Format(STRING(sQuery), "UPDATE `ref_data` USE INDEX(`indexed_steamid`) SET `invited` = (`invited` + '1') WHERE `steamid` = '%s';", g_sPlayerInviterSteam[iClient]);
+				g_database.Query(Nothing_Callback, sQuery);
+
+				for (int iTarget = 1; iTarget <= MaxClients; iTarget++)
+				{
+					if (IsClientInGame(iTarget) && !IsFakeClient(iTarget))
+					{
+						if (Karyuu_StrEquals(g_sPlayerSteamID[iTarget], g_sPlayerInviterSteam[iClient]))
+						{
+							g_iPlayerInvited[iTarget]++;
+							g_iPlayerValidated[iTarget]++;
+
+							g_database.Format(STRING(sQuery), "UPDATE `ref_data` USE INDEX(`indexed_steamid`) SET `validated` = (`validated` + '1') WHERE `steamid` = '%s';", g_sPlayerInviterSteam[iClient]);
+							g_database.Query(Nothing_Callback, sQuery);
+
+							float iCredit = g_hConVarCreditsStart.FloatValue + (g_iPlayerInvited[iTarget] * g_hConVarCreditsStep.FloatValue);
+
+							if (Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM3))
+							{
+								iCredit *= 3.0;
+							}
+							else if (Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM4))
+							{
+								iCredit *= 2.0;
+							}
+							else if (Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM6))
+							{
+								iCredit = iCredit * 1.5;
+							}
+
+							GiveCredits(iClient, iCredit);
+
+							CPrintToChat(iTarget, "{default}「{lightred}%T{default}」{lime}%T", "CHAT_PREFIX", iTarget, "CHAT_REFERED_BY", iTarget, iCredit, iClient);
+							break;
+						}
+					}
+				}
+			}
+		}
 	}
 	return Plugin_Continue;
 }
@@ -131,10 +203,69 @@ public Action EventHook_PlayerTeam(Event event, const char[] name, bool dontBroa
 	return Plugin_Continue;
 }
 
+public Action Command_NoReferCode(int iClient, int iArgs)
+{
+	FormatEx(g_sPlayerInviter[iClient], sizeof(g_sPlayerInviter[]), "None");
+
+	char sQuery[256];
+	g_database.Format(STRING(sQuery), "UPDATE `ref_data` SET `inviter` = 'None' WHERE `steamid` = '%s';", g_sPlayerSteamID[iClient]);
+	g_database.Query(Nothing_Callback, sQuery);
+
+	float iCredit = g_hConVarCreditsNew.FloatValue * 0.5;
+	GiveCredits(iClient, iCredit);
+
+	CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_REFERED", iClient, "None", iCredit);
+	return Plugin_Handled;
+}
+
+public Action Command_ReferCode(int iClient, int iArgs)
+{
+	if (!IsClientConnected(iClient))
+		return Plugin_Handled;
+
+	if (g_sPlayerInviter[iClient][0] != '\0')
+	{
+		CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, Karyuu_StrEquals(g_sPlayerInviter[iClient], "None") ? "CHAT_CANT_REFER" : "CHAT_ALREADY_REFERRED", iClient);
+		return Plugin_Handled;
+	}
+
+	char sArg[256];
+	GetCmdArgString(STRING(sArg));
+
+	if (sArg[0] == '\0')
+	{
+		CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "sm_redeem", iClient);
+		return Plugin_Handled;
+	}
+
+	if (strlen(sArg) < 3 || strlen(sArg) > 16)
+	{
+		CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_LENGTH_ERROR", iClient);
+		return Plugin_Handled;
+	}
+
+	if (Karyuu_StrEquals(sArg, g_sPlayerCode[iClient]))
+	{
+		CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_OWN_CODE", iClient);
+		return Plugin_Handled;
+	}
+
+	char sQuery[256];
+	g_database.Format(STRING(sQuery), "SELECT `name`,`steamid`,`code` FROM `ref_data` USE INDEX (`indexed_code`) WHERE `code` = '%s';", sArg);
+	g_database.Query(Callback_GetCodeData, sQuery, GetClientSerial(iClient));
+	return Plugin_Handled;
+}
+
 public Action Command_ReferralMenu(int iClient, int iArgs)
 {
 	if (!IsClientConnected(iClient))
 		return Plugin_Handled;
+
+	if (g_sPlayerInviter[iClient][0] == '\0')
+	{
+		CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_WAIT", iClient, g_hConVarMinTime.IntValue - g_iPlayerTime[iClient]);
+		return Plugin_Handled;
+	}
 
 	bool	bCustomAccess = Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM3) || Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM4) || Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM6);
 
@@ -146,7 +277,6 @@ public Action Command_ReferralMenu(int iClient, int iArgs)
 	Karyuu_Panel_AddText(hPanel, "   • %T: %s", "MENU_CODE", iClient, g_sPlayerCode[iClient]);
 	Karyuu_Panel_AddText(hPanel, "   • %T: %d\n ", "MENU_YOU_INVITED", iClient, g_iPlayerInvited[iClient]);
 	Karyuu_Panel_AddItem(hPanel, bCustomAccess ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED, " ▸ %T", "MENU_SET_CUSTOM", iClient);
-	Karyuu_Panel_AddItem(hPanel, g_sPlayerInviter[iClient][0] == '\0' ? ITEMDRAW_DEFAULT : ITEMDRAW_DISABLED, " ▸ %T", "MENU_REFER", iClient);
 	Karyuu_Panel_AddText(hPanel, " ");
 	Karyuu_Panel_AddItem(hPanel, _, "%T", "MENU_EXIT", iClient);
 	Karyuu_Panel_Send(hPanel, MenuSystem_MainMenu_Handler, iClient);
@@ -163,17 +293,6 @@ public int MenuSystem_MainMenu_Handler(Menu menu, MenuAction action, int iClient
 		switch (iParam)
 		{
 			case 1:
-			{
-				if (g_iPlayerTime[iClient] < g_hConVarMinTime.IntValue)
-				{
-					CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_WAIT", iClient, g_hConVarMinTime.IntValue - g_iPlayerTime[iClient]);
-					return 0;
-				}
-
-				g_iPlayerWriteStatus[iClient] = 1;
-				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_ENTER_CODE", iClient);
-			}
-			case 2:
 			{
 				g_iPlayerWriteStatus[iClient] = 2;
 				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_ENTER_NEW_CODE", iClient);
@@ -196,10 +315,10 @@ public void Database_Connect_Callback(Database database, const char[] error, any
 	g_database = database;
 
 	char sQuery[512];
-	g_database.Format(STRING(sQuery), "CREATE TABLE `ref_data` ( `name` VARCHAR(64) NOT NULL, `steamid` VARCHAR(32) UNSIGNED NOT NULL, `inviter` VARCHAR(32) NULL, `code` VARCHAR(32) NOT NULL COLLATE 'utf8mb4_general_ci', `invited` MEDIUMINT(7) UNSIGNED NULL DEFAULT '0', `validated` MEDIUMINT(7) UNSIGNED NULL DEFAULT '0', PRIMARY KEY (`steamid`) USING BTREE, UNIQUE INDEX `indexed_steamid` (`steamid`) USING BTREE, UNIQUE INDEX `indexed_code` (`code`) USING BTREE ) COLLATE='utf8mb4_general_ci' ENGINE=InnoDB;");
+	g_database.Format(STRING(sQuery), "CREATE TABLE `ref_data` ( `name` VARCHAR(64) NOT NULL, `steamid` VARCHAR(32) UNSIGNED NOT NULL, `inviter` VARCHAR(32) NULL, `inviter_steam` VARCHAR(32) NULL, `code` VARCHAR(32) NOT NULL COLLATE 'utf8mb4_general_ci', `invited` MEDIUMINT(7) UNSIGNED NULL DEFAULT '0', `validated` MEDIUMINT(7) UNSIGNED NULL DEFAULT '0', `time` MEDIUMINT(7) UNSIGNED NULL DEFAULT '0', PRIMARY KEY (`steamid`) USING BTREE, UNIQUE INDEX `indexed_steamid` (`steamid`) USING BTREE, UNIQUE INDEX `indexed_code` (`code`) USING BTREE ) COLLATE='utf8mb4_general_ci' ENGINE=InnoDB;");
 	g_database.Query(Nothing_Callback, sQuery);
 
-	for (int iClient = 1; iClient < MAXPLAYERS + 1; iClient++)
+	for (int iClient = 1; iClient < MAXPLAYERS; iClient++)
 	{
 		if (!IsClientInGame(iClient) || IsFakeClient(iClient))
 			continue;
@@ -227,9 +346,10 @@ public void OnClientPostAdminCheck(int iClient)
 	g_iPlayerValidated[iClient]	= 0;
 	g_iPlayerTime[iClient]			= 0;
 	FormatEx(g_sPlayerCode[iClient], sizeof(g_sPlayerCode[]), "None");
+	g_sPlayerInviterSteam[iClient] = NULL_STRING;
 
 	char sQuery[256];
-	g_database.Format(STRING(sQuery), "SELECT `code`, `invited`, `validated`, `inviter` FROM `ref_data` USE INDEX (`indexed_steamid`) WHERE `steamid` = '%s';", g_sPlayerSteamID[iClient]);
+	g_database.Format(STRING(sQuery), "SELECT `code`, `invited`, `validated`, `inviter`, `time`, `inviter_steam` FROM `ref_data` USE INDEX (`indexed_steamid`) WHERE `steamid` = '%s';", g_sPlayerSteamID[iClient]);
 	g_database.Query(Callback_ClientLoad, sQuery, GetClientSerial(iClient));
 }
 
@@ -256,6 +376,8 @@ static void Callback_ClientLoad(Database database, DBResultSet result, char[] er
 				result.FetchString(0, g_sPlayerCode[iClient], sizeof(g_sPlayerCode[]));
 				g_iPlayerInvited[iClient]	 = result.FetchInt(1);
 				g_iPlayerValidated[iClient] = result.FetchInt(2);
+				g_iPlayerTime[iClient]		 = result.FetchInt(4);
+				result.FetchString(5, g_sPlayerInviterSteam[iClient], sizeof(g_sPlayerInviterSteam[]));
 
 				char sInviter[16];
 				result.FetchString(3, STRING(sInviter));
@@ -275,6 +397,34 @@ static void Callback_ClientLoad(Database database, DBResultSet result, char[] er
 			g_iPlayerInvited[iClient]	 = 0;
 			g_iPlayerValidated[iClient] = 0;
 
+			char SteamID[32];
+			GetClientAuthId(iClient, AuthId_Steam2, STRING(SteamID));
+
+			g_database.Format(STRING(sQuery), "SELECT `ID` FROM `du_users_copy` WHERE `steamid` = '%s';", SteamID);
+			g_database.Query(Callback_CheckPlayer, sQuery, GetClientSerial(iClient));
+		}
+	}
+}
+
+static void Callback_CheckPlayer(Database database, DBResultSet result, char[] error, any data)
+{
+	if (database == null || result == null)
+	{
+		LogError("Query failure | Error: %s", error);
+		return;
+	}
+
+	int iClient = GetClientFromSerial(data);
+	if (IsClientInGame(iClient) && !IsFakeClient(iClient))
+	{
+		char sQuery[256];
+		if (result.RowCount > 0)
+		{
+			g_database.Format(STRING(sQuery), "INSERT INTO `ref_data` (`name`, `steamid`, `code`, `inviter`) VALUES ('%N', '%s', SUBSTRING(MD5(RAND()) FROM 1 FOR 6, 'None');", iClient, g_sPlayerSteamID[iClient]);
+			g_database.Query(Nothing_Callback, sQuery);
+		}
+		else
+		{
 			g_database.Format(STRING(sQuery), "INSERT INTO `ref_data` (`name`, `steamid`, `code`) VALUES ('%N', '%s', SUBSTRING(MD5(RAND()) FROM 1 FOR 6);", iClient, g_sPlayerSteamID[iClient]);
 			g_database.Query(Nothing_Callback, sQuery);
 		}
@@ -323,17 +473,6 @@ public Action OnClientSayCommand(int iClient, const char[] command, const char[]
 
 	switch (g_iPlayerWriteStatus[iClient])
 	{
-		case 1:
-		{
-			if (Karyuu_StrEquals(trimmedMessage, g_sPlayerCode[iClient]))
-			{
-				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_OWN_CODE", iClient);
-				return Plugin_Handled;
-			}
-
-			g_database.Format(STRING(sQuery), "SELECT `name`,`steamid`,`code` FROM `ref_data` USE INDEX (`indexed_code`) WHERE `code` = '%s';", trimmedMessage);
-			g_database.Query(Callback_GetCodeData, sQuery, GetClientSerial(iClient));
-		}
 		case 2:
 		{
 			if (strlen(trimmedMessage) < 3 || strlen(trimmedMessage) > 16)
@@ -404,48 +543,10 @@ static void Callback_GetCodeData(Database database, DBResultSet result, char[] e
 				result.FetchString(1, STRING(sInviterSteamID));
 				result.FetchString(2, STRING(sInviterCode));
 
-				g_database.Format(STRING(sQuery), "UPDATE `ref_data` USE INDEX(`indexed_steamid`) SET `invited` = (`invited` + '1') WHERE `steamid` = '%s';", sInviterSteamID);
-				g_database.Query(Nothing_Callback, sQuery);
-
 				g_database.Format(STRING(sQuery), "UPDATE `ref_data` USE INDEX(`indexed_steamid`) SET `inviter` = '%s' WHERE `steamid` = '%s';", iClient, sInviterCode, g_sPlayerSteamID[iClient]);
 				g_database.Query(Nothing_Callback, sQuery);
 
-				GiveCredits(iClient, g_hConVarCreditsNew.FloatValue);
-
-				for (int iTarget = 1; iTarget <= MaxClients; iTarget++)
-				{
-					if (IsClientInGame(iTarget) && !IsFakeClient(iTarget))
-					{
-						if (Karyuu_StrEquals(g_sPlayerSteamID[iTarget], sInviterSteamID))
-						{
-							g_iPlayerInvited[iTarget]++;
-							g_iPlayerValidated[iTarget]++;
-
-							g_database.Format(STRING(sQuery), "UPDATE `ref_data` USE INDEX(`indexed_steamid`) SET `validated` = (`validated` + '1') WHERE `steamid` = '%s';", sInviterSteamID);
-							g_database.Query(Nothing_Callback, sQuery);
-
-							float iCredit = g_hConVarCreditsStart.FloatValue + (g_iPlayerInvited[iTarget] * g_hConVarCreditsStep.FloatValue);
-
-							if (Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM3))
-							{
-								iCredit *= 3.0;
-							}
-							else if (Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM4))
-							{
-								iCredit *= 2.0;
-							}
-							else if (Karyuu_ClientHasFlag(iClient, ADMFLAG_CUSTOM6))
-							{
-								iCredit = iCredit * 1.5;
-							}
-
-							GiveCredits(iClient, iCredit);
-
-							CPrintToChat(iTarget, "{default}「{lightred}%T{default}」{lime}%T", "CHAT_PREFIX", iTarget, "CHAT_REFERED_BY", iTarget, iCredit, iClient);
-							break;
-						}
-					}
-				}
+				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lightred}%T", "CHAT_PREFIX", iClient, "CHAT_REFERRED", iClient, g_hConVarRewardTime.IntValue);
 
 				static char sWebHook[512];
 				if (sWebHook[0] == '\0')
@@ -459,7 +560,7 @@ static void Callback_GetCodeData(Database database, DBResultSet result, char[] e
 					hWebhook.SetUsername("KitsuneLab");
 					hWebhook.SetAvatarURL("https://kitsune-lab.dev/storage/images/kl-logo.webp");
 
-					Embed hEmbed = new Embed("⌜Player Referral⌟ ", "");
+					Embed hEmbed = new Embed("⌜Player Referral⌟", "");
 					hEmbed.SetTimeStampNow();
 					hEmbed.SetColor(15844367);
 
@@ -491,8 +592,6 @@ static void Callback_GetCodeData(Database database, DBResultSet result, char[] e
 					hWebhook.Execute(sWebHook, OnWebHookExecuted, _);
 					delete hWebhook;
 				}
-
-				CPrintToChat(iClient, "{default}「{lightred}%T{default}」{lime}%T", "CHAT_PREFIX", iClient, "CHAT_REFERED", iClient, g_sPlayerInviter[iClient], g_hConVarCreditsNew.FloatValue);
 			}
 		}
 		else
