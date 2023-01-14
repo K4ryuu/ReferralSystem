@@ -6,15 +6,15 @@
 	}
 	"MENU_INVITED_BY"
 	{
-		"en"				"Invited by: {1}"
+		"en"				"Invited by"
 	}
 	"MENU_YOU_INVITED"
 	{
-		"en"				"Your invites: {1}"
+		"en"				"Your invites"
 	}
 	"MENU_CODE"
 	{
-		"en"				"Your code: {1}"
+		"en"				"Your code"
 	}
 	"MENU_SET_CUSTOM"
 	{
@@ -46,12 +46,12 @@
 	}
 	"CHAT_REFERED"
 	{
-		"#format" 		"{1:s},{2:.2f}"
+		"#format" 		"{1:s},{2:d}"
 		"en"				"You have been refered by {1} and recieved {2} credits."
 	}
 	"CHAT_REFERED_BY"
 	{
-		"#format" 		"{1:.2f},{2:N}"
+		"#format" 		"{1:d},{2:N}"
 		"en"				"You have recieved {1} credits for refering {2}."
 	}
 	"CHAT_CODE_EXISTS"
@@ -77,11 +77,12 @@
 	}
 	"CHAT_RECIEVE_OFFLINE"
 	{
-		"#format" 		"{1:d},{2:.2f}"
+		"#format" 		"{1:d},{2:d}"
 		"en"				"You have recieved {1} credits for refering {2} players while being offline."
 	}
 	"CHAT_WAIT"
 	{
+		"#format" 		"{1:d}"
 		"en"				"You have to play {1} more minutes to be able to use this command."
 	}
 	"CHAT_LENGTH_ERROR"
